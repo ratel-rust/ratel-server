@@ -1,0 +1,8 @@
+[package]
+name = "ratel-server"
+version = "0.1.0"
+authors = ["Maciej Hirsz <maciej.hirsz@gmail.com>"]
+
+[dependencies]
+ratel = "0.5.2"
+iron = "0.4.0"
