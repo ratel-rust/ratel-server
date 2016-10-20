@@ -6,6 +6,8 @@ use iron::prelude::*;
 use iron::status;
 use ratel::error::ParseError;
 
+const DEFAULT_PORT: u16 = 3000;
+
 fn compile(source: String, minify: bool) -> Result<String, ParseError> {
     let mut ast = match ratel::parser::parse(source) {
         Ok(ast)    => ast,
@@ -33,6 +35,13 @@ fn main() {
         })
     }
 
-    let _server = Iron::new(handler).http("0.0.0.0:3000").unwrap();
-    println!("On 3000");
+
+    let port = option_env!("PORT").map(|port| port.parse().expect("Invalid port"))
+                                  .unwrap_or(DEFAULT_PORT);
+
+    let address = format!("0.0.0.0:{}", port);
+
+    let _server = Iron::new(handler).http(address.as_str()).expect("Cannot start the server");
+
+    println!("Listening on port {}", port);
 }
