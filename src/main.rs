@@ -1,14 +1,14 @@
 extern crate ratel;
 extern crate iron;
+extern crate json;
 
 use std::io::Read;
 use iron::prelude::*;
 use iron::status;
 use ratel::error::ParseError;
-
 const DEFAULT_PORT: u16 = 3000;
 
-fn compile(source: String, minify: bool) -> Result<String, ParseError> {
+fn compile(source: String, minify: bool, get_ast: bool) -> Result<String, ParseError> {
     let mut ast = match ratel::parser::parse(source) {
         Ok(ast)    => ast,
         Err(error) => return Err(error),
@@ -17,22 +17,48 @@ fn compile(source: String, minify: bool) -> Result<String, ParseError> {
     let settings = ratel::transformer::Settings::target_es5();
     ratel::transformer::transform(&mut ast, settings);
 
+    if get_ast {
+        return Ok(format!("{:#?}", ast));
+    }
+
     Ok(ratel::codegen::generate_code(&ast, minify))
 }
 
 fn main() {
     fn handler(req: &mut Request) -> IronResult<Response> {
-        let mut source = String::new();
 
-        match req.body.read_to_string(&mut source) {
-            Ok(_)  => {},
-            Err(_) => return Ok(Response::with((status::BadRequest, ":("))),
-        }
+        let mut payload = String::new();
 
-        Ok(match compile(source, false) {
-            Ok(source) => Response::with((status::Ok, source)),
-            Err(error) => Response::with((status::UnprocessableEntity, format!("{:?}", error))),
-        })
+        match req.body.read_to_string(&mut payload) {
+            Ok(_)      => {},
+            Err(_)     => {
+              return Ok(Response::with((status::BadRequest, "Cannot parse request payload")));
+            }
+        };
+
+        let mut payload = match json::parse(&payload.as_str()) {
+            Ok(value)   => value,
+            Err(_)      => {
+                return Ok(Response::with((status::UnprocessableEntity, "Cannot parse JSON.")));
+            }
+        };
+
+        let source = match payload["source"].take_string() {
+            Some(value)    => value,
+            None           => {
+                return Ok(Response::with((status::BadRequest, "No source provided")));
+            }
+        };
+
+        let minify = payload["minify"].as_bool().unwrap_or(false);
+        let get_ast = payload["ast"].as_bool().unwrap_or(false);
+
+        let response = match compile(source, minify, get_ast) {
+            Ok(result)        => Response::with((status::Ok, result)),
+            Err(err)          => Response::with((status::UnprocessableEntity, format!("{:#?}", err)))
+        };
+
+        Ok(response)
     }
 
 

@@ -4,7 +4,19 @@
 
 **Ratel** is a high performance JavaScript compiler with a Rust core.
 
-This is a very simple HTTP server that will accept ES6+ JavaScript as POST body and respond with ES5 compiled code.
+This is a very simple HTTP server that will accept ES2015+ JavaScript and responds with ES5 compiled code.
+
+## Usage
+
+ratel-server implements a JSON API using [json-rust](https://github.com/maciejhirsz/json-rust).
+
+````json
+{
+  "source": "const foo=\"\bar"",
+  "minify": true,
+  "ast": false
+}
+````
 
 ## Logo
 
