@@ -1,21 +1,42 @@
 extern crate ratel;
 extern crate iron;
+
 #[macro_use]
 extern crate json;
 
+use std::env;
+use std::str::FromStr;
+use std::net::Ipv4Addr;
 use std::io::Read;
 use iron::prelude::*;
-use iron::status;
+use iron::{headers, status};
+use iron::method::Method;
+use iron::middleware::AfterMiddleware;
 use ratel::error::ParseError;
+
+const PROTOCOL: &'static str = "http";
+const DEFAULT_HOST: &'static str = "0.0.0.0";
 const DEFAULT_PORT: u16 = 3000;
+
+struct CorsMiddleware;
+
+impl AfterMiddleware for CorsMiddleware {
+    fn after(&self, _: &mut Request, mut response: Response) -> IronResult<Response> {
+        let cors_methods: Vec<Method> = vec![Method::Options, Method::Get, Method::Post];
+        response.headers.set(headers::AccessControlAllowOrigin::Any);
+        response.headers.set(headers::AccessControlAllowMethods(cors_methods));
+        Ok(response)
+    }
+}
 
 fn get_json_response(error_code: iron::status::Status, payload: String) -> IronResult<Response> {
     let object = object!{
         "success"  => error_code == status::Ok,
         "result"   => payload
     };
-
-    Ok(Response::with((error_code, object.dump())))
+    let mut response: Response = Response::with((error_code, object.dump()));
+    response.headers.set(headers::ContentType::json());
+    Ok(response)
 }
 
 fn compile(source: String, minify: bool, get_ast: bool) -> Result<String, ParseError> {
@@ -64,13 +85,25 @@ fn main() {
         response
     }
 
+    let mut chain = Chain::new(handler);
 
-    let port = option_env!("PORT").map(|port| port.parse().expect("Invalid port"))
-                                  .unwrap_or(DEFAULT_PORT);
+    if env::var("CORS").is_ok() {
+        chain.link_after(CorsMiddleware);
+    }
 
-    let address = format!("0.0.0.0:{}", port);
+    let host = match env::var("HOST") {
+        Ok(value) => Ipv4Addr::from_str(&value).expect("Invalid IPv4 address"),
+        _         => Ipv4Addr::from_str(&DEFAULT_HOST).unwrap()
+    };
 
-    let _server = Iron::new(handler).http(address.as_str()).expect("Cannot start the server");
+    let port = match env::var("PORT") {
+        Ok(value) => value.parse::<u16>().expect("Invalid port"),
+        _         => DEFAULT_PORT
+    };
 
-    println!("Listening on port {}", port);
+    let address = format!("{}:{}", host, port);
+
+    let _server = Iron::new(chain).http(address.as_str()).expect("Cannot start the server");
+
+    println!("Listening on {}://{}:{}", PROTOCOL, host, port);
 }
